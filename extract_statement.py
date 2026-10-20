@@ -23,6 +23,7 @@ INTERNATIONAL_RE = re.compile(rf"^(\d{{2}})/(\d{{2}})\s+(.+?)\s+({AMOUNT})\s+({A
 DATE_START_RE = re.compile(r"^\d{2}/\d{2}\s")
 AMOUNT_END_RE = re.compile(rf"({AMOUNT})$")
 INSTALLMENT_RE = re.compile(r"\s(\d{2}/\d{2})$")
+FOREIGN_DETAIL_RE = re.compile(rf"^({AMOUNT})\s+[A-Za-z]{{3}}\s+({AMOUNT})$")
 ISSUE_DATE_RE = re.compile(r"(?:emissao|postagem):\s*(\d{2})/(\d{2})/(\d{4})")
 
 # Total lines printed by the bank (compared with our own sums), matched after fold()
@@ -109,7 +110,7 @@ def parse_statement(text):
             section = None
 
         for key, prefix in TOTAL_PREFIXES.items():
-            if folded.startswith(prefix):
+            if prefix in folded:
                 match = AMOUNT_END_RE.search(line)
                 if match:
                     totals[key] = parse_amount(match.group(1))
@@ -144,8 +145,23 @@ def parse_statement(text):
 
         elif section == "international":
             match = INTERNATIONAL_RE.match(line)
+            if not match:
+                # Alternative layout: date + description + BRL on line 1,
+                # "<amount> <CUR> <foreign amount>" on line 2.
+                single = DOMESTIC_RE.match(line)
+                if single:
+                    day, month, description, brl_text = single.groups()
+                    usd_text = None
+                    if i + 1 < len(lines):
+                        detail = FOREIGN_DETAIL_RE.match(lines[i + 1])
+                        if detail:
+                            usd_text = detail.group(2)
+                            i += 1
+                    match = (day, month, description, usd_text, brl_text)
+            else:
+                match = match.groups()
             if match:
-                day, month, description, usd_text, brl_text = match.groups()
+                day, month, description, usd_text, brl_text = match
                 transactions.append(
                     {
                         "Date": resolve_date(int(day), int(month), issue_date),
@@ -154,7 +170,7 @@ def parse_statement(text):
                         "City": "",
                         "Installment": "",
                         "Amount (BRL)": parse_amount(brl_text),
-                        "Amount (USD)": parse_amount(usd_text),
+                        "Amount (USD)": parse_amount(usd_text) if usd_text else None,
                         "Type": "international",
                     }
                 )

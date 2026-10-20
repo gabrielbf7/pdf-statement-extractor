@@ -74,3 +74,32 @@ def test_validation_detects_mismatch(result):
     wrong_totals = dict(result["totals"], grand=Decimal("700.00"))
     checks = validate(result["transactions"], wrong_totals)
     assert checks[-1]["ok"] is False
+
+
+ALT_LAYOUT_TEXT = """Banco Exemplo
+Emissao: 14/10/2026
+Lancamentos: compras e saques
+07/10 PadariaSolNasceCURI 84,90
+supermercado CURITIBA
+Lancamentos no cartao 84,90
+Lancamentos internacionais
+DATA ESTABELECIMENTO US$ R$
+09/10 STREAMCO* PLANO MENSAL 63,36
+63,36 USD 12,00
+Dolar de Conversao R$ 5,28
+Total transacoes inter. em R$ 63,36
+Repasse de IOF em R$ 2,22
+Total lancamentos inter. em R$ 65,58
+* Total dos lancamentos atuais 150,48
+"""
+
+
+def test_international_on_two_lines_and_noisy_total():
+    result = parse_statement(ALT_LAYOUT_TEXT)
+    international = [t for t in result["transactions"] if t["Type"] == "international"]
+    assert len(international) == 1
+    assert international[0]["Amount (BRL)"] == Decimal("63.36")
+    assert international[0]["Amount (USD)"] == Decimal("12.00")
+    assert result["totals"]["grand"] == Decimal("150.48")
+    checks = validate(result["transactions"], result["totals"])
+    assert all(c["ok"] is True for c in checks)
