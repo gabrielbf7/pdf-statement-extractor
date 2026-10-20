@@ -19,6 +19,8 @@ import pandas as pd
 import pdfplumber
 from pdfplumber.utils.exceptions import PdfminerException
 
+from merchants import merchant_summary, unknown_merchants
+
 # Brazilian number format: 1.234,56 (negative values: -22,40)
 AMOUNT = r"-?\d{1,3}(?:\.\d{3})*,\d{2}"
 DOMESTIC_RE = re.compile(rf"^(\d{{2}})/(\d{{2}})\s+(.+?)\s+({AMOUNT})$")
@@ -300,23 +302,43 @@ def build_dataframe(transactions):
     return df
 
 
-def write_excel(df, path):
+def style_sheet(ws, widths, money_columns=()):
+    ws.freeze_panes = "A2"
+    for column, width in widths.items():
+        ws.column_dimensions[column].width = width
+    for column in money_columns:
+        for cell in ws[column][1:]:
+            cell.number_format = "#,##0.00"
+
+
+def write_excel(df, path, merchants=None, unknown=None):
+    """Write the Excel file: Transactions, By merchant and Unknown sheets."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    sheet = "Transactions"
+    merchants = merchant_summary(df) if merchants is None else merchants
+    unknown = unknown_merchants(df) if unknown is None else unknown
     with pd.ExcelWriter(path, engine="openpyxl", date_format="DD/MM/YYYY") as writer:
-        df.to_excel(writer, index=False, sheet_name=sheet)
-        ws = writer.sheets[sheet]
-        ws.freeze_panes = "A2"
-        widths = {"A": 12, "B": 34, "C": 18, "D": 16, "E": 12, "F": 14, "G": 14, "H": 14}
-        for column, width in widths.items():
-            ws.column_dimensions[column].width = width
-        for column in ("F", "G"):
-            for cell in ws[column][1:]:
-                cell.number_format = "#,##0.00"
+        df.to_excel(writer, index=False, sheet_name="Transactions")
+        style_sheet(
+            writer.sheets["Transactions"],
+            {"A": 12, "B": 34, "C": 18, "D": 16, "E": 12, "F": 14, "G": 14, "H": 14},
+            money_columns=("F", "G"),
+        )
+        merchants.to_excel(writer, index=False, sheet_name="By merchant")
+        style_sheet(
+            writer.sheets["By merchant"],
+            {"A": 34, "B": 14, "C": 14, "D": 18, "E": 12, "F": 12},
+            money_columns=("C",),
+        )
+        unknown.to_excel(writer, index=False, sheet_name="Unknown")
+        style_sheet(
+            writer.sheets["Unknown"],
+            {"A": 12, "B": 30, "C": 14, "D": 14, "E": 16, "F": 44, "G": 60, "H": 30},
+            money_columns=("C",),
+        )
 
 
-def print_summary(pdf_path, output_path, result, df, checks):
+def print_summary(pdf_path, output_path, result, df, checks, merchants, unknown):
     transactions = result["transactions"]
     print(f"File: {pdf_path}")
     print(f"Statement issued: {result['issue_date']:%d/%m/%Y}")
@@ -340,6 +362,9 @@ def print_summary(pdf_path, output_path, result, df, checks):
     )
     for category, value in by_category.items():
         print(f"  {category:<18}{format_brl(Decimal(str(round(value, 2)))):>12}")
+    print()
+    print(f"Merchants (after grouping): {len(merchants)}")
+    print(f"Unknown or suspicious descriptions: {len(unknown)} (see sheet 'Unknown')")
     print()
     print(f"Excel saved to: {output_path}")
 
@@ -366,8 +391,10 @@ def main(argv=None):
 
     checks = validate(result["transactions"], result["totals"])
     df = build_dataframe(result["transactions"])
-    write_excel(df, output_path)
-    print_summary(pdf_path, output_path, result, df, checks)
+    merchants = merchant_summary(df)
+    unknown = unknown_merchants(df)
+    write_excel(df, output_path, merchants, unknown)
+    print_summary(pdf_path, output_path, result, df, checks, merchants, unknown)
 
     if any(check["ok"] is not True for check in checks):
         print("\nWARNING: validation failed. Check the Excel against the PDF.")
