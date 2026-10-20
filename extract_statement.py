@@ -6,6 +6,8 @@ Usage:
 """
 
 import argparse
+import getpass
+import os
 import re
 import sys
 import unicodedata
@@ -15,6 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 import pdfplumber
+from pdfplumber.utils.exceptions import PdfminerException
 
 # Brazilian number format: 1.234,56 (negative values: -22,40)
 AMOUNT = r"-?\d{1,3}(?:\.\d{3})*,\d{2}"
@@ -77,14 +80,16 @@ def resolve_date(day, month, issue_date):
 
 
 def split_category_city(line):
-    """'eletrodomestico SAO PAULO' -> ('eletrodomestico', 'SAO PAULO')."""
+    """'eletrodomestico SAO PAULO' -> ('eletrodomestico', 'SAO PAULO').
+
+    The category is the run of leading all-lowercase words; the city is the rest
+    (any case, e.g. 'Redmond'). A line with no lowercase start has no category.
+    """
     tokens = line.split()
-    first_upper = next((i for i, t in enumerate(tokens) if t.isupper()), None)
-    if first_upper is None:
-        return line, ""
-    if first_upper == 0:
-        return tokens[0], " ".join(tokens[1:])
-    return " ".join(tokens[:first_upper]), " ".join(tokens[first_upper:])
+    n = 0
+    while n < len(tokens) and tokens[n].islower():
+        n += 1
+    return " ".join(tokens[:n]), " ".join(tokens[n:])
 
 
 def parse_statement(text):
@@ -220,7 +225,11 @@ def validate(transactions, totals):
                 "name": labels[key],
                 "calculated": calculated[key],
                 "expected": expected,
-                "ok": None if expected is None else calculated[key] == expected,
+                "ok": (
+                    calculated[key] == 0
+                    if expected is None and key != "grand"
+                    else None if expected is None else calculated[key] == expected
+                ),
             }
         )
     return checks
@@ -239,12 +248,49 @@ def main_column(page):
     return page.crop((0, 0, min(starts) - 2, page.height))
 
 
-def read_pdf_text(path):
-    with pdfplumber.open(path) as pdf:
+PASSWORD_ENV_VAR = "STATEMENT_PDF_PASSWORD"
+
+
+class PasswordRequired(ValueError):
+    """The PDF is encrypted and no (or a wrong) password was given."""
+
+
+def open_pdf(path, password=None):
+    try:
+        return pdfplumber.open(path, password=password or "")
+    except PdfminerException as error:
+        if "PDFPasswordIncorrect" in repr(error) or "Password" in repr(error):
+            raise PasswordRequired("PDF is password-protected.") from error
+        raise ValueError(f"Could not open the PDF: {error}") from error
+
+
+def read_pdf_text(path, password=None):
+    with open_pdf(path, password) as pdf:
         text = "\n".join((main_column(page).extract_text() or "") for page in pdf.pages)
     if not text.strip():
         raise ValueError("No selectable text found (scanned PDF? OCR is not supported).")
     return text
+
+
+def read_pdf_text_asking_password(path):
+    """Try without password, then the env var, then prompt (hidden input, up to 3 tries)."""
+    candidates = [None]
+    if os.environ.get(PASSWORD_ENV_VAR):
+        candidates.append(os.environ[PASSWORD_ENV_VAR])
+    for password in candidates:
+        try:
+            return read_pdf_text(path, password)
+        except PasswordRequired:
+            continue
+    if not sys.stdin.isatty():
+        raise ValueError(f"PDF is password-protected. Set {PASSWORD_ENV_VAR} or run interactively.")
+    for _ in range(3):
+        password = getpass.getpass("PDF password (typing is hidden): ")
+        try:
+            return read_pdf_text(path, password)
+        except PasswordRequired:
+            print("Wrong password.", file=sys.stderr)
+    raise ValueError("Wrong password (3 attempts).")
 
 
 def build_dataframe(transactions):
@@ -279,7 +325,7 @@ def print_summary(pdf_path, output_path, result, df, checks):
     print("Validation (our sum vs. total printed on the statement):")
     for check in checks:
         status = {True: "OK", False: "MISMATCH", None: "NOT FOUND"}[check["ok"]]
-        expected = "-" if check["expected"] is None else format_brl(check["expected"])
+        expected = "- (not in statement)" if check["expected"] is None else format_brl(check["expected"])
         print(
             f"  [{status}] {check['name']}: "
             f"calculated {format_brl(check['calculated'])} | statement {expected}"
@@ -313,7 +359,7 @@ def main(argv=None):
     output_path = Path(args.output) if args.output else Path("output") / f"{pdf_path.stem}.xlsx"
 
     try:
-        result = parse_statement(read_pdf_text(pdf_path))
+        result = parse_statement(read_pdf_text_asking_password(pdf_path))
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

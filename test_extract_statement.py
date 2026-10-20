@@ -103,3 +103,28 @@ def test_international_on_two_lines_and_noisy_total():
     assert result["totals"]["grand"] == Decimal("150.48")
     checks = validate(result["transactions"], result["totals"])
     assert all(c["ok"] is True for c in checks)
+
+
+def test_split_category_city_mixed_case_and_missing_category():
+    assert split_category_city("outros Redmond") == ("outros", "Redmond")
+    assert split_category_city("SUPERMARKET") == ("", "SUPERMARKET")
+    assert split_category_city("material de construcao SAO PAULO") == (
+        "material de construcao",
+        "SAO PAULO",
+    )
+
+
+NO_INTERNATIONAL_TEXT = """Banco Exemplo
+Emissao: 14/09/2026
+Lancamentos: compras e saques
+07/09 CASA DO LAGO RESTLTDCU 100,00
+restaurante CURITIBA
+Lancamentos no cartao 100,00
+Total dos lancamentos atuais 100,00
+"""
+
+
+def test_statement_without_international_section_is_ok():
+    result = parse_statement(NO_INTERNATIONAL_TEXT)
+    checks = validate(result["transactions"], result["totals"])
+    assert [c["ok"] for c in checks] == [True, True, True]
