@@ -6,6 +6,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# Claude Code local settings
+.claude/
+
 # Secrets and API keys
 .env
 
