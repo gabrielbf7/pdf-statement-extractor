@@ -20,7 +20,7 @@ The terminal also prints a **validation**: the sum of the extracted transactions
 
 ## Setup
 
-Python 3.10+ is required.
+Python 3.11+ is required.
 
 ```bash
 python -m venv venv
