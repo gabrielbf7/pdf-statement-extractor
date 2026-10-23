@@ -1,0 +1,21 @@
+# Copy this file to private_data.txt and replace with YOUR data.
+# private_data.txt is in .gitignore: never commit it.
+# One value per line. Spaces, punctuation, accents and case are ignored.
+
+# Name variants, as they may appear on statements
+JOHN MEYER EXAMPLE
+JOHN M EXAMPLE
+J MEYER EXAMPLE
+
+# Card and account numbers (full or the visible part)
+1234XXXXXXXX0000
+1234567890
+
+# Documents
+123.456.789-00
+
+# Address
+RUA DAS FLORES, 100
+APTO 12
+BAIRRO EXEMPLO
+80000-000

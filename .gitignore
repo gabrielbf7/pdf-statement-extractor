@@ -17,3 +17,4 @@ __pycache__/
 
 # Generated output
 output/
+private_data.txt
