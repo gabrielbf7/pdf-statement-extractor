@@ -35,7 +35,7 @@ python extract_statement.py samples/sample_statement.pdf
 python extract_statement.py statement.pdf -o output/result.xlsx
 ```
 
-By default the Excel file is saved in `output/`.
+By default the Excel file is saved as `output/statement.xlsx` (bank file names may contain the account number, so the output name is generic). Use `-o` to choose another name; an existing file is overwritten (with a warning).
 
 **Password-protected PDF:** the program asks for the password in the terminal (hidden input). For automation, set the `STATEMENT_PDF_PASSWORD` environment variable. The password is never accepted as a command-line flag.
 

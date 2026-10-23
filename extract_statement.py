@@ -374,14 +374,19 @@ def main(argv=None):
         description="Extract transactions from a credit card statement PDF into Excel."
     )
     parser.add_argument("pdf", help="path to the statement PDF (selectable text)")
-    parser.add_argument("-o", "--output", help="output .xlsx path (default: output/<name>.xlsx)")
+    parser.add_argument(
+        "-o", "--output", help="output .xlsx path (default: output/statement.xlsx)"
+    )
     args = parser.parse_args(argv)
 
     pdf_path = Path(args.pdf)
     if not pdf_path.is_file():
         print(f"Error: file not found: {pdf_path}", file=sys.stderr)
         return 2
-    output_path = Path(args.output) if args.output else Path("output") / f"{pdf_path.stem}.xlsx"
+    # Generic output name: bank file names may contain the account number.
+    output_path = Path(args.output) if args.output else Path("output") / "statement.xlsx"
+    if output_path.exists():
+        print(f"Warning: {output_path} already exists and will be overwritten.")
 
     try:
         result = parse_statement(read_pdf_text_asking_password(pdf_path))

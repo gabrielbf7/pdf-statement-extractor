@@ -6,6 +6,7 @@ import pytest
 
 from extract_statement import (
     format_brl,
+    main,
     parse_amount,
     parse_statement,
     read_pdf_text,
@@ -128,3 +129,17 @@ def test_statement_without_international_section_is_ok():
     result = parse_statement(NO_INTERNATIONAL_TEXT)
     checks = validate(result["transactions"], result["totals"])
     assert [c["ok"] for c in checks] == [True, True, True]
+
+
+def test_default_output_name_is_generic(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert main([str(SAMPLE)]) == 0
+    assert [p.name for p in (tmp_path / "output").iterdir()] == ["statement.xlsx"]
+
+
+def test_main_warns_before_overwriting(tmp_path, capsys):
+    output = tmp_path / "result.xlsx"
+    output.write_bytes(b"old")
+    assert main([str(SAMPLE), "-o", str(output)]) == 0
+    assert "already exists and will be overwritten" in capsys.readouterr().out
+    assert output.read_bytes() != b"old"
