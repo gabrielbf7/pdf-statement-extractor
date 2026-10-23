@@ -29,8 +29,8 @@ import pymupdf
 # --- Generic patterns (safety net for data not in private_data.txt) ---------
 
 # Card or account numbers: 13-19 digits/X/*, grouped (4-4-4-4, Amex 4-4-4-3)
-# or in one run.
-CARD_RE = re.compile(r"(?<![\w*])[\dX*]{4}(?:[ .-]?[\dX*]{2,6}){1,4}(?![\w*])", re.I)
+# or in one run. Never ends right before ",00"/".00" (part of an amount).
+CARD_RE = re.compile(r"(?<![\w*])[\dX*]{4}(?:[ .-]?[\dX*]{2,6}){1,4}(?![\w*]|[.,]\d)", re.I)
 CARD_END_RE = re.compile(r"\b(final|término|termino|ending in)\s*\d{4}\b", re.I)
 # Document/account codes: any word with 8+ digits in a row.
 ID_RE = re.compile(r"\b(?=\w*\d{8})\w{10,}\b")
@@ -86,7 +86,7 @@ def find_words_to_redact(words, private_values):
     texts = [w[4] for w in words]
 
     # 1. Private values: search the line with spaces/punctuation removed,
-    #     so "1234 56XX" and "JohnMeyer" glued together still match.
+    #    so "1234 56XX" and "JohnMeyer" glued together still match.
     norm_words = [normalize(t) for t in texts]
     joined, owner = "", []
     for i, nw in enumerate(norm_words):
