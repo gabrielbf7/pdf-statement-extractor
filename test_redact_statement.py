@@ -132,6 +132,53 @@ def test_leftover_check_ok(redacted_pdf):
     assert leftover_check(output, private_values) == 0
 
 
+def make_pdf(path, lines):
+    doc = pymupdf.open()
+    page = doc.new_page()
+    for i, line in enumerate(lines):
+        page.insert_text((72, 72 + 20 * i), line)
+    doc.save(path)
+    doc.close()
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "CEP 80000-000",
+        "Contato: john.meyer@example.com",
+        "Protocolo 123456789012",
+    ],
+)
+def test_leftover_check_finds_generic_patterns(tmp_path, line):
+    pdf = tmp_path / "leak.pdf"
+    make_pdf(pdf, [line])
+    assert leftover_check(pdf, []) == 1
+
+
+def test_leftover_check_short_private_value_whole_word_only(tmp_path):
+    pdf = tmp_path / "leak.pdf"
+    make_pdf(pdf, ["Titular ANA", "BANANA"])
+    assert leftover_check(pdf, ["ana"]) == 1
+    make_pdf(pdf, ["BANANA"])
+    assert leftover_check(pdf, ["ana"]) == 0
+
+
+def test_leftover_check_keeps_codes_on_transaction_lines(tmp_path):
+    pdf = tmp_path / "ok.pdf"
+    make_pdf(pdf, ["07/10 LOJA 123456789012 10,00"])
+    assert leftover_check(pdf, []) == 0
+
+
+def test_leftover_check_closes_the_document(tmp_path, monkeypatch):
+    pdf = tmp_path / "ok.pdf"
+    make_pdf(pdf, ["Nothing private here"])
+    opened = []
+    real_open = pymupdf.open
+    monkeypatch.setattr(pymupdf, "open", lambda *a: opened.append(real_open(*a)) or opened[-1])
+    leftover_check(pdf, [])
+    assert opened and all(doc.is_closed for doc in opened)
+
+
 def test_metadata_removed(redacted_pdf):
     with pymupdf.open(redacted_pdf[0]) as doc:
         assert not doc.metadata.get("author")

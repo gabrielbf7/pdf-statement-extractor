@@ -164,12 +164,23 @@ def redact(doc, private_values):
 
 def leftover_check(path, private_values):
     """Reopen the redacted file and look for anything that should be gone."""
-    doc = pymupdf.open(path)
-    text = "\n".join(page.get_text() for page in doc)
+    with pymupdf.open(path) as doc:
+        text = "\n".join(page.get_text() for page in doc)
     norm = normalize(text)
-    left = sum(1 for v in private_values if len(v) >= MIN_SUBSTRING_LEN and v in norm)
+    norm_words = {normalize(w) for w in text.split()}
+    # Same rules as find_words_to_redact: short values only as whole words.
+    left = sum(
+        1
+        for v in private_values
+        if (v in norm if len(v) >= MIN_SUBSTRING_LEN else v in norm_words)
+    )
     left += sum(1 for m in CARD_RE.finditer(text) if is_card(m.group(0)))
-    left += len(CPF_RE.findall(text)) + len(BARCODE_RE.findall(text))
+    for pattern in (CPF_RE, CEP_RE, EMAIL_RE, BARCODE_RE):
+        left += len(pattern.findall(text))
+    # Codes with many digits are kept on transaction lines.
+    left += sum(
+        len(ID_RE.findall(line)) for line in text.splitlines() if not is_transaction_line(line)
+    )
     return left
 
 
