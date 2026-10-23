@@ -11,6 +11,7 @@ from redact_statement import (
     is_transaction_line,
     leftover_check,
     load_private_values,
+    main,
     normalize,
     redact,
 )
@@ -177,6 +178,27 @@ def test_leftover_check_closes_the_document(tmp_path, monkeypatch):
     monkeypatch.setattr(pymupdf, "open", lambda *a: opened.append(real_open(*a)) or opened[-1])
     leftover_check(pdf, [])
     assert opened and all(doc.is_closed for doc in opened)
+
+
+def run_main(monkeypatch, *args):
+    monkeypatch.setattr("sys.argv", ["redact_statement.py", *map(str, args)])
+    main()
+
+
+def test_main_refuses_output_equal_to_input(tmp_path, monkeypatch):
+    pdf = tmp_path / "statement.pdf"
+    pdf.write_bytes(SAMPLE_PDF.read_bytes())
+    with pytest.raises(SystemExit, match="different file"):
+        run_main(monkeypatch, pdf, "-o", pdf, "--private", EXAMPLE_PRIVATE)
+    assert pdf.read_bytes() == SAMPLE_PDF.read_bytes()
+
+
+def test_main_warns_before_overwriting(tmp_path, monkeypatch, capsys):
+    output = tmp_path / "redacted.pdf"
+    output.write_bytes(b"old")
+    run_main(monkeypatch, SAMPLE_PDF, "-o", output, "--private", EXAMPLE_PRIVATE)
+    assert "already exists and will be overwritten" in capsys.readouterr().out
+    assert output.read_bytes() != b"old"
 
 
 def test_metadata_removed(redacted_pdf):

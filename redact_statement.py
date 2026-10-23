@@ -32,7 +32,7 @@ import pymupdf
 # or in one run. Never ends right before ",00"/".00" (part of an amount).
 CARD_RE = re.compile(r"(?<![\w*])[\dX*]{4}(?:[ .-]?[\dX*]{2,6}){1,4}(?![\w*]|[.,]\d)", re.I)
 CARD_END_RE = re.compile(r"\b(final|término|termino|ending in)\s*\d{4}\b", re.I)
-# Document/account codes: any word with 8+ digits in a row.
+# Document/account codes: words of 10+ characters with 8+ digits in a row.
 ID_RE = re.compile(r"\b(?=\w*\d{8})\w{10,}\b")
 CPF_RE = re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b")
 CEP_RE = re.compile(r"\b\d{5}-\d{3}\b")
@@ -196,6 +196,10 @@ def main():
 
     # Generic output name: bank file names may contain the account number.
     output = args.output or args.pdf.parent / "statement_redacted.pdf"
+    if output.exists() and output.samefile(args.pdf):
+        sys.exit("The output must be a different file from the input PDF.")
+    if output.exists():
+        print(f"Warning: {output} already exists and will be overwritten.")
     private_values = load_private_values(args.private)
 
     doc = open_pdf(args.pdf)
