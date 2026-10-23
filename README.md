@@ -73,6 +73,7 @@ At the end, the script reopens the redacted file and runs a **leftover check**. 
 - The parser follows the layout of one bank's statement (dates as DD/MM, amounts as 1.234,56, category and city on the second line of each entry). Other banks may need adjustments.
 - The **Unknown** sheet is a heuristic based only on the statement itself. It does not look anything up online, so it points out suspicious descriptions but does not identify them.
 - Redaction is best effort: a value missing from `private_data.txt` in an unusual format may survive the generic patterns. The visual check is part of the process.
+- Redaction works on one text line at a time: a value split across two lines (e.g. a name or address that wraps) is not redacted. Barcodes and QR codes printed as images are not redacted either. Check both visually and cover them manually if needed.
 - Real statements contain personal data: never commit them. Only the fictional sample is in this repository.
 
 ## Author
